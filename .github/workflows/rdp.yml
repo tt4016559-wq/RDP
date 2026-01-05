@@ -1,0 +1,88 @@
+name: Yanzz W11-RDP-TS-FULL
+
+on:
+  workflow_dispatch:
+
+jobs:
+  win11-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Enable RDP + W11 look
+        run: |
+          Set-ItemProperty -Path 'HKLM:SystemCurrentControlSetControlTerminal Server' -name "fDenyTSConnections" -value 0
+          Set-ItemProperty -Path 'HKLM:SystemCurrentControlSetControlTerminal ServerWinStationsRDP-Tcp' -name "UserAuthentication" -value 0
+          Set-ItemProperty -Path 'HKLM:SystemCurrentControlSetControlTerminal ServerWinStationsRDP-Tcp' -name "SecurityLayer" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Restart-Service -Name TermService -Force
+
+          # W11 wallpaper
+          Invoke-WebRequest https://res.cloudinary.com/drsmmc2hz/image/upload/v1763382890/ebloza4ferubydvmutcj.jpg -OutFile C:\w11.jpg
+          reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "C:\w11.jpg" /f
+          RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+
+      - name: Create root user Yanzz
+        run: |
+          $pass = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
+          $sec = ConvertTo-SecureString $pass -AsPlainText -Force
+          New-LocalUser -Name "Yanzz" -Password $sec -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "Yanzz"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Yanzz"
+          # Simpan Creds ke file sementara biar bisa dibaca step selanjutnya
+          echo "User: Yanzz" > C:\creds.txt
+          echo "Pass: $pass" >> C:\creds.txt
+          echo "CREDS=User: Yanzz  |  Pass: $pass" >> $env:GITHUB_ENV
+
+      - name: Install Tailscale
+        run: |
+          Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe -OutFile ts.exe
+          Start-Process -FilePath "ts.exe" -ArgumentList "/quiet", "/norestart" -Wait
+
+      - name: Establish Tailscale Connection
+        run: |
+          & "$env:ProgramFilesTailscale	ailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gha-rdp-yanzz --accept-routes
+          $ip = & "$env:ProgramFilesTailscale	ailscale.exe" ip -4
+          echo "TS_IP=$ip" >> $env:GITHUB_ENV
+
+      - name: Install Chrome
+        run: |
+          Invoke-WebRequest https://dl.google.com/chrome/install/latest/chrome_installer.exe -OutFile chrome.exe
+          Start-Process .chrome.exe -Args "/silent /install" -Wait
+
+      - name: Download Roblox (Installer Only)
+        run: |
+          Invoke-WebRequest https://setup.rbxcdn.com/RobloxPlayerLauncher.exe -OutFile C:\RobloxPlayerLauncher.exe
+          Write-Host "Roblox Installer saved at C:\RobloxPlayerLauncher.exe"
+
+      - name: Install VS Code
+        run: |
+          Invoke-WebRequest "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user" -OutFile vscode.exe
+          Start-Process .scode.exe -ArgumentList "/VERYSILENT /MERGETASKS=!runcode" -Wait
+
+      - name: Set Environment & Wallpaper System-wide
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v Wallpaper /t REG_SZ /d "C:\w11.jpg" /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v WallpaperStyle /t REG_SZ /d "2" /f
+          # Disable UAC for smooth RDP
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v EnableLUA /t REG_DWORD /d 0 /f
+
+      - name: SHOW CREDENTIALS
+        run: |
+          Write-Host "=========================================="
+          Write-Host "       YANZZ RDP (GITHUB ACTIONS)         "
+          Write-Host "=========================================="
+          Write-Host "IP ADDRESS (Tailscale) : $env:TS_IP"
+          cat C:\creds.txt
+          Write-Host "=========================================="
+          Write-Host "Roblox Installer: C:\RobloxPlayerLauncher.exe"
+          Write-Host "=========================================="
+
+      - name: Anti-Shutdown Loop (6 Hours Max)
+        run: |
+          $i = 0
+          while ($i -lt 360) {
+            $i++
+            Write-Host "Alive: $i minutes running..."
+            Start-Sleep 60
+          }
