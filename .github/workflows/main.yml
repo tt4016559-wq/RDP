@@ -1,4 +1,4 @@
-name: Yanzz W11-RDP-TS-FULL
+name: Yanzz 
 
 on:
   workflow_dispatch:
